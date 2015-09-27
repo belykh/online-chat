@@ -1,0 +1,16 @@
+.message {
+	border: 1px solid gray;
+	border-radius: 5px;
+	margin: 8px;
+	padding: 8px;
+	background-color: #eee;
+}
+
+.load-more {
+	border: 1px solid gray;
+	border-radius: 5px;
+	margin: 8px;
+	padding: 8px;
+	background-color: #AFBDFF;
+	cursor: pointer;
+}

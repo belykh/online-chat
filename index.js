@@ -1,4 +1,5 @@
 var express = require('express');
+var string = require('string');
 var WebSocketServer = require('ws').Server;
 var app = express();
 
@@ -18,12 +19,6 @@ app.listen(app.get('port'), function() {
 	console.log('Node app is running on port', app.get('port'));
 });
 
-var MESSAGES = {
-	'USER_MESSAGE': 1,
-	'USER_JOIN': 2,
-	'USER_LEFT': 3
-}
-
 function Users() {
 	var list = [];
 	this.join = function(username) {
@@ -31,8 +26,7 @@ function Users() {
 		console.log('users join', username, JSON.stringify(list));
 	};
 	this.remove = function(username) {
-		var index = list.indexOf(username);
-		list.splice(index, 1);
+		list.splice(list.indexOf(username), 1);
 		console.log('users remove', username, JSON.stringify(list));
 	};
 	this.get = function() {
@@ -46,13 +40,26 @@ var users = new Users();
 
 function Messages() {
 	var list = [];
+	var lastId = 0;
 	this.add = function(message) {
+		message.id = lastId++;
 		list.push(message);
 	};
-	this.get = function(from, to) {
-		from = from || 0;
-		to = to || from + 20;
-		return list.slice(from, to);
+	this.get = function(fromId, count) {
+		count = count || 5;
+		var from = list.length - 1;
+		if (fromId) {
+			for (var i = 1; i < list.length; i++) {
+				if (list[i].id == fromId) {
+					from = i - 1;
+				}
+			}
+		}
+		return {
+			messages: list.slice(from - count, from),
+			total: list.length,
+			more: from - count + 1
+		};
 	};
 }
 var messages = new Messages();
@@ -68,16 +75,13 @@ wss.on('connection', function (ws) {
 		var event = null;
 		try {
 			event = JSON.parse(message);
-			console.log('event', event);
 		} catch (e) {
-			console.log('PARSE error');
 			return;
 		}
 		//console.log('event', JSON.stringify(event));
 		switch (event.action) {
 			case 'auth': 
 				username = event.name;
-				console.log('username', username);
 				if (users.exists(username)) {
 					console.log('send message auth-fail');
 					ws.send(JSON.stringify({
@@ -95,6 +99,7 @@ wss.on('connection', function (ws) {
 						'user': username
 					});
 					var usersList = users.get();
+					usersList.splice(usersList.indexOf(username), 1); // remove current username
 					ws.send(JSON.stringify({
 						'action': 'load-users',
 						'users': usersList
@@ -102,12 +107,14 @@ wss.on('connection', function (ws) {
 					var messagesList = messages.get();
 					ws.send(JSON.stringify({
 						'action': 'load-messages',
-						'messages': messagesList
+						'messages': messagesList.messages,
+						'total': messagesList.total,
+						'more': messagesList.more
 					}));
 				}
 				break;
 			case 'message':
-				var text = event.message
+				var text = string(event.message).escapeHTML().s;
 				console.log('user message', text);
 				var now = new Date().getTime();
 				var message = {
@@ -120,6 +127,16 @@ wss.on('connection', function (ws) {
 					'action': 'user-message',
 					'message': message
 				});
+				break;
+
+			case 'load-messages':
+				var messagesList = messages.get(event.fromId);
+				ws.send(JSON.stringify({
+					'action': 'load-messages',
+					'messages': messagesList.messages,
+					'total': messagesList.total,
+					'more': messagesList.more
+				}));
 				break;
 		}
 	});

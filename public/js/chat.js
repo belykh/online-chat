@@ -17,13 +17,24 @@
 			}));
 		}, false);
 		$('send-button').addEventListener('click', function() {
-			var message = $('message-input').value;
-			ws.send(JSON.stringify({
-				action: 'message',
-				message: message
-			}));
+			sendMessage();
 		}, false);
+		$('message-input').addEventListener('keydown', function(e) {
+			if (e.keyCode == 13 && e.ctrlKey) {
+				sendMessage();
+			}
+		});
 		initWS();
+	}
+	function sendMessage() {
+		messageInput = $('message-input');
+		var message = messageInput.value;
+		messageInput.value = '';
+		messageInput.focus();
+		ws.send(JSON.stringify({
+			action: 'message',
+			message: message
+		}));
 	}
 	function initWS() {
 		//var ws = null;
@@ -67,25 +78,45 @@
 			case 'load-messages':
 				var messages = message.messages;
 				var $messagesList = $('messages-list');
-				while ($messagesList.firstChild) {
+				if ($messagesList.firstChild && $messagesList.firstChild.innerText == 'load more messages') {
 					$messagesList.removeChild($messagesList.firstChild);
 				}
-				for (var i = 0; i < messages.length; i++) {
+
+				for (var i = messages.length - 1; i >= 0 ; i--) {
 					var div = document.createElement('div');
+					div.className = 'message';
 					var date = new Date(messages[i].date);
-					div.innerHTML = '(' + date.toLocaleString() + ') ' + messages[i].user + ': ' + messages[i].text;
-					$messagesList.appendChild(div);
+					div.innerHTML = '(' + date.toLocaleString() + ') ' + messages[i].user + ':<br>' + messages[i].text.replace(/\n/, '<br>');
+					$messagesList.insertBefore(div, $messagesList.firstChild);
+				}
+				$messagesList.scrollTop = $messagesList.scrollHeight;
+				if (message.more > 0) {
+					console.log('load more')
+					var div = document.createElement('div');
+					div.className = 'load-more';
+					div.innerHTML = 'load more messages';
+					div.addEventListener('click', function() {
+						ws.send(JSON.stringify({
+							action: 'load-messages',
+							fromId: messages[0].id
+						}));
+					}, false);
+					$messagesList.insertBefore(div, $messagesList.firstChild);
 				}
 				break;
+
 			case 'user-message':
 				var message = message.message;
 				console.log('user-message', message);
 				var $messagesList = $('messages-list');
 				var div = document.createElement('div');
+				div.className = 'message';
 				var date = new Date(message.date);
-				div.innerHTML = '(' + date.toLocaleString() + ') ' + message.user + ': ' + message.text;
+				div.innerHTML = '(' + date.toLocaleString() + ') ' + message.user + ':<br>' + message.text;
 				$messagesList.appendChild(div);
+				$messagesList.scrollTop = $messagesList.scrollHeight;
 				break;
+
 			case 'user-join':
 				var user = message.user;
 				var $usersList = $('users-list');
@@ -93,11 +124,11 @@
 				div.innerHTML = user;
 				$usersList.appendChild(div);
 				break;
+
 			case 'user-left':
 				var user = message.user;
 				var $usersList = $('users-list');
 				var nodes = $usersList.childNodes;
-				console.log(nodes);
 				for (i = 0; i < nodes.length; i ++) {
 					if (nodes[i].innerText == user) {
 						$usersList.removeChild(nodes[i]);
@@ -113,8 +144,13 @@
 		$('chat-container').style.display = 'none';
 	}
 	function showUI() {
+		var $messagesList = $('messages-list');
+		while ($messagesList.firstChild) {
+			$messagesList.removeChild($messagesList.firstChild);
+		}
 		$('init-container').style.display = 'none';
 		$('chat-container').style.display = 'block';
+		$('message-input').focus();
 	}
 
 //})();
