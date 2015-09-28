@@ -3,7 +3,6 @@ var http = require("http");
 var WebSocketServer = require('ws').Server;
 var app = express();
 var port = process.env.PORT || 5000;
-//app.set('port', (process.env.PORT || 5000));
 
 app.use(express.static(__dirname + '/public'));
 
