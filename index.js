@@ -1,10 +1,14 @@
 var express = require('express');
+var http = require("http");
 var WebSocketServer = require('ws').Server;
 var app = express();
-
-app.set('port', (process.env.PORT || 5000));
+var port = process.env.PORT || 5000;
+//app.set('port', (process.env.PORT || 5000));
 
 app.use(express.static(__dirname + '/public'));
+
+var server = http.createServer(app);
+server.listen(port);
 
 // views is directory for all template files
 app.set('views', __dirname + '/views');
@@ -18,7 +22,9 @@ app.listen(app.get('port'), function() {
 	console.log('Node app is running on port', app.get('port'));
 });
 
-var wss = new WebSocketServer({port: 9000});
+var wss = new WebSocketServer({
+	server: server
+});
 wss.on('connection', function (ws) {	
 	var username = '';
 	var registered = false;

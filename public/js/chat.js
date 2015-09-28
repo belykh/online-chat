@@ -41,7 +41,8 @@
 		}));
 	}
 	function initWS() {
-		ws = new WebSocket('ws://' + document.location.hostname + ':9000');
+		var host = location.origin.replace(/^http/, 'ws')
+		ws = new WebSocket(host);
 		ws.addEventListener('error', function(e) {
 			console.log('WebSocket error', e);
 			var $errorPanel = $('error-panel');
