@@ -1,19 +1,21 @@
-//(function(){
+(function(){
 	var ws = null;
+	var username = '';
 	function $(id) {
 		return document.getElementById(id);
 	}
-	window.addEventListener('error', function(e) {
-		console.log('window error', e);
-	});
+
 	window.addEventListener('load', onLoadWindow, false);
 
 	function onLoadWindow() {
 		$('submit-button').addEventListener('click', function() {
-			var name = $('name-input').value;
+			username = $('name-input').value.trim();
+			if (!username)
+				return;
+			$('username').innerHTML = username;
 			ws.send(JSON.stringify({
 				action: 'auth',
-				name: name
+				name: username
 			}));
 		}, false);
 		$('send-button').addEventListener('click', function() {
@@ -28,7 +30,9 @@
 	}
 	function sendMessage() {
 		messageInput = $('message-input');
-		var message = messageInput.value;
+		var message = messageInput.value.trim();
+		if (!message)
+			return;
 		messageInput.value = '';
 		messageInput.focus();
 		ws.send(JSON.stringify({
@@ -37,32 +41,36 @@
 		}));
 	}
 	function initWS() {
-		//var ws = null;
-		ws = new WebSocket('ws://localhost:9000');
+		ws = new WebSocket('ws://' + document.location.hostname + ':9000');
 		ws.addEventListener('error', function(e) {
-			console.log('we error', e);
+			console.log('WebSocket error', e);
 			var $errorPanel = $('error-panel');
 			$errorPanel.style.display = 'block';
 		});
 		ws.addEventListener('close', function(e) {
-			console.log('we close', e);
+			console.log('WebSocket close', e);
 			$('init-container').style.display = 'block';
 			$('error-panel').style.display = 'block';
 			$('login-form').style.display = 'none';
 			$('chat-container').style.display = 'none';
 			window.setTimeout(initWS, 5000);
 		});
-		ws.addEventListener('open', onOpen, false);
-		ws.addEventListener('message', onMessage, false);
+		ws.addEventListener('open', onOpenWebSocket, false);
+		ws.addEventListener('message', onMessageWebSocket, false);
 	}
 
-	function onMessage(event) {
+	function onMessageWebSocket(event) {
 		console.log('message', event.data);
 		var message = JSON.parse(event.data);
 		switch (message.action) {
 			case 'auth-success':
 				showUI();
 				break;
+
+			case 'auth-fail':
+				alert('User already exists!\nPlease use another username');
+				break;
+
 			case 'load-users':
 				var users = message.users;
 				var $usersList = $('users-list');
@@ -70,11 +78,14 @@
 					$usersList.removeChild($usersList.firstChild);
 				}
 				for (var i = 0; i < users.length; i++) {
+					if (users[i] == username)
+						continue;
 					var div = document.createElement('div');
 					div.innerHTML = users[i];
 					$usersList.appendChild(div);
 				}
 				break;
+
 			case 'load-messages':
 				var messages = message.messages;
 				var $messagesList = $('messages-list');
@@ -91,7 +102,6 @@
 				}
 				$messagesList.scrollTop = $messagesList.scrollHeight;
 				if (message.more > 0) {
-					console.log('load more')
 					var div = document.createElement('div');
 					div.className = 'load-more';
 					div.innerHTML = 'load more messages';
@@ -108,25 +118,27 @@
 			case 'user-message':
 				var message = message.message;
 				console.log('user-message', message);
-				var $messagesList = $('messages-list');
-				var div = document.createElement('div');
-				div.className = 'message';
-				var date = new Date(message.date);
-				div.innerHTML = '(' + date.toLocaleString() + ') ' + message.user + ':<br>' + message.text;
-				$messagesList.appendChild(div);
-				$messagesList.scrollTop = $messagesList.scrollHeight;
+				addMessageToView(message, 'message');
 				break;
 
 			case 'user-join':
 				var user = message.user;
+				if (user == username) {
+					return;
+				}				
 				var $usersList = $('users-list');
 				var div = document.createElement('div');
 				div.innerHTML = user;
 				$usersList.appendChild(div);
+				message.text = 'User has joined to the chat';
+				addMessageToView(message, 'system');
 				break;
 
 			case 'user-left':
 				var user = message.user;
+				if (user == username) {
+					return;
+				}	
 				var $usersList = $('users-list');
 				var nodes = $usersList.childNodes;
 				for (i = 0; i < nodes.length; i ++) {
@@ -134,14 +146,17 @@
 						$usersList.removeChild(nodes[i]);
 					}
 				}
+				message.text = 'User has left from the chat';
+				addMessageToView(message, 'system');
 				break;
 		}
 	}
-	function onOpen(event) {
+	function onOpenWebSocket(event) {
 		$('init-container').style.display = 'block';
 		$('login-form').style.display = 'block';
 		$('error-panel').style.display = 'none';
 		$('chat-container').style.display = 'none';
+		$('name-input').focus();
 	}
 	function showUI() {
 		var $messagesList = $('messages-list');
@@ -152,6 +167,13 @@
 		$('chat-container').style.display = 'block';
 		$('message-input').focus();
 	}
-
-//})();
-
+	function addMessageToView(message, className) {
+		var $messagesList = $('messages-list');
+		var div = document.createElement('div');
+		div.className = className;
+		var date = new Date(message.date);
+		div.innerHTML = '(' + date.toLocaleString() + ') ' + (message.user ? message.user : '') + ':<br>' + message.text;
+		$messagesList.appendChild(div);
+		$messagesList.scrollTop = $messagesList.scrollHeight;
+	}
+})();

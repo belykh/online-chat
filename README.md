@@ -1,4 +1,12 @@
-# online-chat
+# Online Chat
+
+Single Page Application allows users to chat on the Internet
+
+# Dependencies
+
+- express - web framework for Node.js
+- ejs - JavaScript templates
+- ws - using WebSocket
 
 # Deploing using [Heroku](https://heroku.com)
 
@@ -7,7 +15,7 @@
 Make sure you have [Node.js](http://nodejs.org/) and the [Heroku Toolbelt](https://toolbelt.heroku.com/) installed.
 
 ```sh
-$ git clone git@github.com:heroku/node-js-getting-started.git # or clone your own fork
+$ git clone git@github.com:belykh/online-chat.git # or clone your own fork
 $ cd online-chat
 $ npm install
 $ npm start

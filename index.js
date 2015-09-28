@@ -1,5 +1,4 @@
 var express = require('express');
-var string = require('string');
 var WebSocketServer = require('ws').Server;
 var app = express();
 
@@ -19,103 +18,55 @@ app.listen(app.get('port'), function() {
 	console.log('Node app is running on port', app.get('port'));
 });
 
-function Users() {
-	var list = [];
-	this.join = function(username) {
-		list.push(username);
-		console.log('users join', username, JSON.stringify(list));
-	};
-	this.remove = function(username) {
-		list.splice(list.indexOf(username), 1);
-		console.log('users remove', username, JSON.stringify(list));
-	};
-	this.get = function() {
-		return list.slice();
-	};
-	this.exists = function(name) {
-		return !(list.indexOf(name) == -1);
-	}
-}
-var users = new Users();
-
-function Messages() {
-	var list = [];
-	var lastId = 0;
-	this.add = function(message) {
-		message.id = lastId++;
-		list.push(message);
-	};
-	this.get = function(fromId, count) {
-		count = count || 5;
-		var from = list.length - 1;
-		if (fromId) {
-			for (var i = 1; i < list.length; i++) {
-				if (list[i].id == fromId) {
-					from = i - 1;
-				}
-			}
-		}
-		return {
-			messages: list.slice(from - count, from),
-			total: list.length,
-			more: from - count + 1
-		};
-	};
-}
-var messages = new Messages();
-
 var wss = new WebSocketServer({port: 9000});
 wss.on('connection', function (ws) {	
 	var username = '';
 	var registered = false;
-	console.log('on connection');
+	console.log('WebSocketServer onConnection');
 
 	ws.on('message', function (message) {
-		console.log('message', message);
+		console.log('WebSocketServer onMessage', message);
 		var event = null;
 		try {
 			event = JSON.parse(message);
 		} catch (e) {
 			return;
 		}
-		//console.log('event', JSON.stringify(event));
 		switch (event.action) {
 			case 'auth': 
 				username = event.name;
 				if (users.exists(username)) {
-					console.log('send message auth-fail');
-					ws.send(JSON.stringify({
+					sendMessage({
 						'action': 'auth-fail',
 						'message': 'User already exists'
-					}));
+					});
 				} else {
-					console.log('send message auth-success');
 					users.join(username);
-					ws.send(JSON.stringify({
+					sendMessage({
 						'action': 'auth-success'
-					}));
-					broadcast({
+					});
+					broadcastMessage({
 						'action': 'user-join',
-						'user': username
+						'user': username,
+						'date': new Date().getTime()
 					});
 					var usersList = users.get();
-					usersList.splice(usersList.indexOf(username), 1); // remove current username
-					ws.send(JSON.stringify({
+					sendMessage({
 						'action': 'load-users',
 						'users': usersList
-					}));
+					});
 					var messagesList = messages.get();
-					ws.send(JSON.stringify({
+					sendMessage({
 						'action': 'load-messages',
 						'messages': messagesList.messages,
 						'total': messagesList.total,
 						'more': messagesList.more
-					}));
+					});
 				}
 				break;
+
 			case 'message':
-				var text = string(event.message).escapeHTML().s;
-				console.log('user message', text);
+				var text = tools.escapeHtml(event.message);
 				var now = new Date().getTime();
 				var message = {
 					user: username,
@@ -123,7 +74,7 @@ wss.on('connection', function (ws) {
 					date: now
 				};
 				messages.add(message);
-				broadcast({
+				broadcastMessage({
 					'action': 'user-message',
 					'message': message
 				});
@@ -131,40 +82,113 @@ wss.on('connection', function (ws) {
 
 			case 'load-messages':
 				var messagesList = messages.get(event.fromId);
-				ws.send(JSON.stringify({
+				sendMessage({
 					'action': 'load-messages',
 					'messages': messagesList.messages,
 					'total': messagesList.total,
 					'more': messagesList.more
-				}));
+				});
 				break;
 		}
 	});
 
 	ws.on('close', function() {
-		console.log('close');
+		console.log('WebSocketServer onClose');
 		if (username) {
 			users.remove(username);
-			broadcast({
+			broadcastMessage({
 				'action': 'user-left',
-				'user': username
+				'user': username,
+				'date': new Date().getTime()
 			});
 		}
 	});
 
 	ws.on('error', function() {
-		console.log('error');
-	})
+		console.log('WebSocketServer onError');
+	});
+
+	function sendMessage(message) {
+		console.log('sendMessage', message);
+		ws.send(JSON.stringify(message));	
+	}
 });
 
-
-function broadcast(message) {
-	console.log('broadcast', JSON.stringify(message));
-	var now = new Date().getTime();
-	message.date = now;
+function broadcastMessage(message) {
+	console.log('broadcastMessage', message);
 	if (wss && wss.clients) {
 		wss.clients.forEach(function (ws) {
 			ws.send(JSON.stringify(message));
 		});
 	}
 }
+
+var users = new function() {
+	var list = [];
+	this.join = function(username) {
+		list.push(username);
+	};
+	this.remove = function(username) {
+		list.splice(list.indexOf(username), 1);
+	};
+	this.get = function() {
+		return list.slice();
+	};
+	this.exists = function(name) {
+		return !(list.indexOf(name) == -1);
+	}
+};
+
+var messages = new function() {
+	var list = [];
+	var lastId = 0;
+	var DEFAUL_SIZE_REQUEST_BUFFER = 10;
+	this.add = function(message) {
+		message.id = lastId++;
+		list.push(message);
+	};
+	/**
+	*	Returns array of messages
+	*	If parameters are omitted - returns last messages
+	*	@return Array
+	*		Array of messages	
+	*	@param int toId
+	*		Max message ID for requested buffer history
+	*	@param int count|DEFAUL_SIZE_REQUEST_BUFFER
+	*		Size of the requested buffer
+	*/
+	this.get = function(toId, count) {
+		count = count || DEFAUL_SIZE_REQUEST_BUFFER;
+		var to = list.length;
+		if (toId) {
+			for (var i = list.length - 1; i >= 0 ; i--) {
+				if (list[i].id == toId) {
+					to = i;
+					break;
+				}
+			}
+		}
+		var from = to - count >= 0 ? to - count : 0;
+		return {
+			messages: list.slice(from, to),
+			total: list.length,
+			more: from
+		};
+	};
+};
+
+var tools = new function() {
+	var entityMap = {
+		"&": "&amp;",
+		"<": "&lt;",
+		">": "&gt;",
+		'"': '&quot;',
+		"'": '&#39;',
+		"/": '&#x2F;'
+	};
+	this.escapeHtml = function(string) {
+		return String(string).replace(/[&<>"'\/]/g, function (s) {
+			return entityMap[s];
+		});
+	};
+};
